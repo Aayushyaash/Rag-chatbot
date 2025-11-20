@@ -152,7 +152,7 @@ ffmpeg -version
 ### 1. Clone or download this repository
 
 ```bash
-cd rag1
+cd Rag-chatbot
 ```
 
 ### 2. Create virtual environment (recommended)
