@@ -1,0 +1,136 @@
+"""
+API Client utility for communicating with FastAPI backend.
+Provides typed interfaces for all backend endpoints.
+"""
+
+import os
+import requests
+from typing import Optional, Dict, Any, List
+from dataclasses import dataclass
+
+
+@dataclass
+class Citation:
+    """Citation metadata."""
+    source_filename: str
+    page_number: Optional[int]
+    chunk_index: int
+
+
+@dataclass
+class RAGResponse:
+    """Response from RAG query."""
+    answer: str
+    citations: List[Citation]
+    retrieved_chunks: List[Dict[str, Any]]
+
+
+@dataclass
+class Document:
+    """Document metadata."""
+    doc_id: str
+    source_filename: str
+    pages: Optional[int]
+    chunks: int
+    ingested_at: str
+
+
+class BackendAPIClient:
+    """Client for FastAPI backend."""
+    
+    def __init__(self, base_url: str = None):
+        """Initialize client with backend URL."""
+        self.base_url = base_url or os.getenv("BACKEND_URL", "http://localhost:8000")
+    
+    def health_check(self) -> Dict[str, Any]:
+        """Check backend health."""
+        try:
+            response = requests.get(f"{self.base_url}/health", timeout=5)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+    
+    def ask(self, query: str) -> RAGResponse:
+        """Ask a question using RAG."""
+        response = requests.post(
+            f"{self.base_url}/ask",
+            json={"query": query},
+            timeout=30
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        return RAGResponse(
+            answer=data["answer"],
+            citations=[Citation(**c) for c in data.get("citations", [])],
+            retrieved_chunks=data.get("retrieved_chunks", [])
+        )
+    
+    def upload_document(self, file_path: str) -> Dict[str, Any]:
+        """Upload a PDF document."""
+        with open(file_path, "rb") as f:
+            files = {"file": f}
+            response = requests.post(
+                f"{self.base_url}/documents",
+                files=files,
+                timeout=300  # 5 minutes for large files
+            )
+            response.raise_for_status()
+            return response.json()
+    
+    def list_documents(self) -> List[Document]:
+        """List all documents."""
+        response = requests.get(f"{self.base_url}/documents", timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        return [Document(**d) for d in data]
+    
+    def get_document(self, doc_id: str) -> Document:
+        """Get specific document details."""
+        response = requests.get(f"{self.base_url}/documents/{doc_id}", timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        return Document(**data)
+    
+    def delete_document(self, doc_id: str) -> Dict[str, Any]:
+        """Delete a document."""
+        response = requests.delete(f"{self.base_url}/documents/{doc_id}", timeout=30)
+        response.raise_for_status()
+        return response.json()
+    
+    def transcribe_audio(self, audio_file_path: str) -> Dict[str, str]:
+        """Transcribe audio to text."""
+        with open(audio_file_path, "rb") as f:
+            files = {"audio": f}
+            response = requests.post(
+                f"{self.base_url}/voice/transcribe",
+                files=files,
+                timeout=60
+            )
+            response.raise_for_status()
+            return response.json()
+    
+    def synthesize_speech(self, text: str) -> bytes:
+        """Convert text to speech (returns MP3 bytes)."""
+        response = requests.post(
+            f"{self.base_url}/voice/synthesize",
+            json={"text": text},
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.content
+    
+    def voice_query(self, audio_file_path: str) -> bytes:
+        """Full voice conversation (returns MP3 bytes)."""
+        with open(audio_file_path, "rb") as f:
+            files = {"audio": f}
+            response = requests.post(
+                f"{self.base_url}/voice/query",
+                files=files,
+                timeout=60
+            )
+            response.raise_for_status()
+            return response.content
